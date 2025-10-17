@@ -2,7 +2,7 @@ import streamlit as st
 from PIL import Image
 from io import BytesIO
 import boto3
-import time
+from streamlit_autorefresh import st_autorefresh
 
 # -------------------------------------------------
 # Streamlit Configuration
@@ -83,68 +83,60 @@ if not frames:
     st.stop()
 
 # -------------------------------------------------
-# Initialize session state for zoom
+# Initialize session state
 # -------------------------------------------------
 if "zoom" not in st.session_state:
-    st.session_state.zoom = 800  # starting width in pixels
-
-# -------------------------------------------------
-# Display image + frame slider
-# -------------------------------------------------
-placeholder = st.empty()
-frame_idx = st.slider(
-    "Frame index",
-    0,
-    len(frames) - 1,
-    0,
-    1,
-    key="frame_slider",
-    label_visibility="visible",
-)
-caption, img = frames[frame_idx]
-placeholder.image(
-    img,
-    caption=f"{selected_label} | Frame {frame_idx+1}/{len(frames)}",
-    width=st.session_state.zoom,
-)
+    st.session_state.zoom = 800
+if "play_mode" not in st.session_state:
+    st.session_state.play_mode = False
 
 # -------------------------------------------------
 # Playback + Zoom controls
 # -------------------------------------------------
 col1, col2, col3, col4 = st.columns([2.5, 1, 1, 1.5])
 with col1:
-    play = st.button("▶ Play sequence", use_container_width=True)
+    if st.session_state.play_mode:
+        if st.button("⏸ Pause", use_container_width=True):
+            st.session_state.play_mode = False
+    else:
+        if st.button("▶ Play sequence", use_container_width=True):
+            st.session_state.play_mode = True
 with col2:
-    zoom_out = st.button("🔍 –", use_container_width=True)
+    if st.button("🔍 –", use_container_width=True):
+        st.session_state.zoom = max(st.session_state.zoom - 100, 400)
 with col3:
-    zoom_in = st.button("🔍 +", use_container_width=True)
+    if st.button("🔍 +", use_container_width=True):
+        st.session_state.zoom = min(st.session_state.zoom + 100, 1600)
 with col4:
     speed = st.slider("Speed (fps)", 1, 20, 5, label_visibility="collapsed")
 
 # -------------------------------------------------
-# Handle zoom clicks with instant refresh
+# Frame index logic
 # -------------------------------------------------
-if zoom_in:
-    st.session_state.zoom = min(st.session_state.zoom + 100, 1600)
-    st.rerun()
-elif zoom_out:
-    st.session_state.zoom = max(st.session_state.zoom - 100, 400)
-    st.rerun()
+if st.session_state.play_mode:
+    # Smooth animation using autorefresh
+    count = st_autorefresh(interval=int(1000 / speed), limit=len(frames) * 1000, key="frame_counter")
+    frame_idx = count % len(frames)
+else:
+    frame_idx = st.slider(
+        "Frame index",
+        0,
+        len(frames) - 1,
+        0,
+        1,
+        key="frame_slider",
+        label_visibility="visible",
+    )
 
 # -------------------------------------------------
-# Run the animation once when Play is pressed
+# Display current frame
 # -------------------------------------------------
-if play:
-    progress = st.progress(0)
-    for i, (caption, img) in enumerate(frames):
-        placeholder.image(
-            img,
-            caption=f"{selected_label} | Frame {i+1}/{len(frames)}",
-            width=st.session_state.zoom,
-        )
-        progress.progress((i + 1) / len(frames))
-        time.sleep(1 / speed)
-    progress.empty()
+caption, img = frames[frame_idx]
+st.image(
+    img,
+    caption=f"{selected_label} | Frame {frame_idx+1}/{len(frames)}",
+    width=st.session_state.zoom,
+)
 
 # -------------------------------------------------
 # Footer
